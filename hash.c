@@ -18,8 +18,6 @@ size_t hash(char *name, char *id) {
 		sum ^= name[i];
 	}
 */
-	
-	printf("res str = %s\n", res);
 
 	for(int i = 0; i < strlen(res); ++i) {
 		result = (result << 2) * res[i] ^ (result >> 1);
