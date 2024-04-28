@@ -99,3 +99,7 @@ int Recv(int fd, char *buffer, size_t size) {
     return bytes;
 }
 
+int Close(int fd) {
+    close(fd);
+    return 0;
+}

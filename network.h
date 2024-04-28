@@ -11,6 +11,6 @@ int Accept(int listenFd);
 int Connect(char *address);
 int Send(int fd, char *buffer, size_t size);
 int Recv(int fd, char *buffer, size_t size);
-
+int Close(int fd);
 
 #endif  // NETWORK_H_
