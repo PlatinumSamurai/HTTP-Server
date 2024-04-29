@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <math.h>
 #include "map.h"
 #include "network.h"
 
@@ -15,6 +16,7 @@ typedef struct HttpRequest {
     char protocol[16];
     uint8_t state;
     size_t index;
+    char postData[2048];
 } HttpRequest;
 
 Http* HttpInit(char *address);

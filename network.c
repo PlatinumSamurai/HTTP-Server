@@ -78,6 +78,7 @@ int Connect(char *address) {
 }
 
 int Send(int fd, char *buffer, size_t size) {
+    printf("====================================================================================================================================\ninside function Send. Buffer to send is \n %s \n\n", buffer);
 	int bytes = send(fd, buffer, (int)size, 0);
 
     if(bytes == -1) {
@@ -94,7 +95,7 @@ int Recv(int fd, char *buffer, size_t size) {
     if(bytes == -1) {
         perror("");
         return RECV_ERR;
-    } 
+    }
 // TODO what if connection is closed and zero bytes are read ?
     return bytes;
 }
