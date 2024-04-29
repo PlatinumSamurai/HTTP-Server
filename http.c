@@ -41,12 +41,14 @@ void HttpFinalize(Http *http) {
 	//free_hashtab(http->tab);
 	free(http->host);
 	free(http->funcs);
+    MapFree(http->map);
 	free(http);
 }
 
 
 void HttpHandle(Http *http, char *path, void(*handle)(int, HttpRequest*)) {
 	Node *node = (Node *)malloc(sizeof(Node));
+
     node->key = path;
     node->value = http->length;
 
@@ -59,21 +61,27 @@ void HttpHandle(Http *http, char *path, void(*handle)(int, HttpRequest*)) {
 		http->funcs = (void(**)(int, HttpRequest*))realloc(http->funcs,
 			http->capacity * (sizeof (void(*)(int, HttpRequest*))));
 	}
+
+   // free(node);
 }
 
 
 int8_t HttpListen(Http *http) {
-	HttpHandle(http, "/success", success_page);
+    int fd = Listen(http->host);
+    time_t start = clock();
+	time_t end;
+
+    HttpHandle(http, "/success", success_page);
     HttpHandle(http, "/fail", fail_page);
 
-    int fd = Listen(http->host);
 	if (fd < 0) {
 		return 1;
 	}
 	while(1) {
-		int conn = Accept(fd);
-		if (conn < 0) {
-			continue;
+        int conn = Accept(fd);
+		printf("client's descriptor is %d\n\n", conn);
+        if (conn < 0) {
+            break;
 		}
 		HttpRequest req = RequestNew();
 		while(1) {
@@ -223,7 +231,7 @@ int8_t HttpSwitch(Http *http, int conn, HttpRequest *request) {
             printf("REQUEST->PATH = \"%s\"", request->path);
         }
         //print("result of comparising computed hash and given is %s\n",
-        //free(givenHash);
+        free(hashStr);
         free(token);
     }
     int index = -1;

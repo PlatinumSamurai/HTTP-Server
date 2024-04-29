@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 #include "map.h"
 #include "network.h"
 

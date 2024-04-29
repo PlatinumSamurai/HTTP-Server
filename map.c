@@ -28,3 +28,13 @@ int MapInsert(Map *map, Node *node) {
 
     return 0;
 }
+
+int MapFree(Map *map) {
+    for(int i = 0; i < map->size; ++i) {
+        free(map->nodes[i]);
+    }
+    free(map->nodes);
+    free(map);
+
+    return 0;
+}

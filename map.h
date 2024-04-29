@@ -19,5 +19,6 @@ typedef struct Map {
 
 Map* MapInit(int);
 int MapInsert(Map *, Node *);
+int MapFree(Map *map);
 
 #endif  // MAP_H_

@@ -5,6 +5,10 @@
 #include <arpa/inet.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
+#include <time.h>
+#include <sys/socket.h>
+#include <fcntl.h>
 
 int Listen(char *address);
 int Accept(int listenFd);

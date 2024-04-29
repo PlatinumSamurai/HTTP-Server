@@ -18,7 +18,7 @@ int Listen(char *address) {
 
 
     if(fd == -1) {
-        perror("");
+        perror("1");
         return LISTEN_ERR;
     }
 
@@ -39,11 +39,22 @@ int Listen(char *address) {
 }
 
 int Accept(int listenFd) {
-    int fd = accept(listenFd, NULL, NULL);
+    int fd;
+    time_t start = clock();
 
+    do {
+        //printf("TIMER = %ld\n", (clock() - start) / CLOCKS_PER_SEC);
+        if((clock() - start) / CLOCKS_PER_SEC > 10) {
+            break;
+        }   
+        fcntl(listenFd, F_SETFL, O_NONBLOCK);
+        fd = accept(listenFd, NULL, NULL);
+        //printf("Client's fd = %d\n", fd);
+    } while(fd == -1 && errno == EAGAIN);
+
+    //printf("Client's fd = %d\n", fd);
     if(fd == -1) {
-        perror("");
-        return ACCEPT_ERR;
+        perror("2");
     }
     
     return fd;
@@ -70,7 +81,7 @@ int Connect(char *address) {
     inet_aton(ip, &addr.sin_addr);
 	
     if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-		perror("");
+		perror("3");
         return CONNECT_ERR;
 	}
 
@@ -82,7 +93,7 @@ int Send(int fd, char *buffer, size_t size) {
 	int bytes = send(fd, buffer, (int)size, 0);
 
     if(bytes == -1) {
-        perror("");
+        perror("4");
         return SEND_ERR;
     }
 
@@ -93,7 +104,7 @@ int Recv(int fd, char *buffer, size_t size) {
 	int bytes = recv(fd, buffer, (int)size, 0);
 
     if(bytes == -1) {
-        perror("");
+        perror("5");
         return RECV_ERR;
     }
 // TODO what if connection is closed and zero bytes are read ?
