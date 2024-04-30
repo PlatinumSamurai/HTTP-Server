@@ -16,6 +16,7 @@ int Listen(char *address) {
     char port[6] = "11111";
     struct sockaddr_in addr;
 
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
 
     if(fd == -1) {
         perror("1");
