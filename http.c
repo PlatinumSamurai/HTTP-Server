@@ -61,8 +61,6 @@ void HttpHandle(Http *http, char *path, void(*handle)(int, HttpRequest*)) {
 		http->funcs = (void(**)(int, HttpRequest*))realloc(http->funcs,
 			http->capacity * (sizeof (void(*)(int, HttpRequest*))));
 	}
-
-   // free(node);
 }
 
 
@@ -182,29 +180,6 @@ void RequestNull(HttpRequest *request) {
 }
 
 int8_t HttpSwitch(Http *http, int conn, HttpRequest *request) {
-/*
-	if (!in_hashtab(http->tab, string(request->path))) {
-		char buffer[PATH_SIZE];
-		memcpy(buffer, request->path, PATH_SIZE);
-		int32_t index = strlen(request->path);
-		if (index == 0) {
-			_page404_http(conn);
-			return 1;
-		}
-		index -= 1;
-//		buffer[index] = '\0';
-		for (; index > 0 && buffer[index] != '/'; --index) {
-			buffer[index] = '\0';
-		}
-		if(!in_hashtab(http->tab, string(buffer))) {
-			_page404_http(conn);
-			return 2;
-		}
-		index = get_hashtab(http->tab, string(buffer)).decimal;
-		http->funcs[index](conn, request);
-		return 0;
-	}
-*/
     if(strcmp(request->method,"POST") && (!strcmp(request->path, "/success") || !strcmp(request->path, "/fail"))) {
         Http404(conn);
         return 0;
@@ -241,6 +216,10 @@ int8_t HttpSwitch(Http *http, int conn, HttpRequest *request) {
             index = i;
             break;
         }
+    }
+    if(index == -1) {
+        Http404(conn);
+        return -1;
     }
 //    int32_t index = get_hashtab(http->tab, string(request->path)).decimal;
 	http->funcs[index](conn, request);
@@ -300,24 +279,59 @@ static void PostParse(HttpRequest *request, char *buffer, int size) {
 
 static size_t Hash(char *name, char *id) {
     char *res = NULL;
-//  int sum = 0;
+    int sum = 0;
     size_t result = 533436788;
     size_t size = strlen(name) + strlen(id) + 1;
-
+    
     res = (char *)malloc(size);
     memset(res, 0, size);
     strcpy(res, name);
-    strcat(res, id);
-/*
-    for(int i = 0; i < strlen(name); ++i) {
-        sum ^= name[i];
-    }
-*/
-label2:
+    //strcat(res, id);
     for(int i = 0; i < strlen(res); ++i) {
-        result = (result << 2) * res[i] ^ (result >> 1);
+        sum += res[i] * (i + 1);
     }
+
+    srand(sum);
+
+    for(int i = 0; i < strlen(res); ++i) {
+        if(rand() % 2) {
+            char ch = res[i];
+            int rnd = rand() % strlen(res);
+            res[i] = res[strlen(res) - 1 - rnd];
+            res[strlen(res) - 1 - rnd] = ch;
+        }
+    }
+    printf("permutated string is \"%s\"\n\n", res);
+   
+    for(int i = 0; i < strlen(res); ++i) {
+        size_t temp;
+
+        goto label4;
+label0:
+        temp = (temp << 2); // step 1
+        goto label6;
+label1:
+        result = temp ^ result ; // step 4
+        goto label7;
+label2:
+        result = (result >> 1) - res[i] + '0'; // step 3
+        goto label1;
 label3:
+        temp = temp * res[i]; // step 2
+        goto label2;
+label4:
+        temp = ~result;
+        goto label0;
+label5:
+        temp = temp ^ 3;
+        goto label3;
+label6:
+        temp = ~temp;
+        goto label5;
+label7:
+//        result = ((result << 2) * res[i]) ^ ((result >> 1) - res[i] + '0');
+    }
+
     free(res);
 
     return result;
