@@ -21,7 +21,7 @@ static void RequestNull(HttpRequest *request);
 static int8_t HttpSwitch(Tp *tp, int conn, HttpRequest *request);
 static void Http404(int conn);
 static void PostParse(HttpRequest *request, char *buffer, int size);
-static size_t Hash(char *name, char *id);
+static size_t Hash(const char *name, const char *id);
 static void success_page(int conn, HttpRequest *req);
 static void fail_page(int conn, HttpRequest *req);
 
@@ -35,10 +35,9 @@ static int HashVerify();
 Ht* HtInit(char *address) {
 	Ht *ht = (Ht *)malloc(sizeof(Ht));
 	ht->capacity = 1000;
-//	http->length = 0;
 	ht->host = (char *)malloc(sizeof(char) * strlen(address) + 1);
 	strcpy(ht->host, address);
-    size_t hash = Hash(address, "");
+    size_t hash = Hash("127.0.0.1", "");
     HashVerify(hash);
 
     return ht;
@@ -50,7 +49,7 @@ Tp* TpInit(Ht *ht) {
     tp->map = MapInit(100);
     tp->funcs = (void(**)(int, HttpRequest *))malloc(ht->capacity * (sizeof (void(*)(int, HttpRequest *))));
     size_t hash = Hash("alexa", "");
-    HashVerify(hash);
+    HashVerify(/*hash*/);
 
     return tp;
 }
@@ -218,6 +217,7 @@ static void RequestParse(HttpRequest *request, char *buffer, size_t size) {
                     if(hashStr == "2093414982389124249852989786121") {
                         strcpy(user, "barabas");
                     }
+                    free(hashStr);
                     continue;
 				}
 				request->path[request->index] = buffer[i];
@@ -314,8 +314,8 @@ static void PostParse(HttpRequest *request, char *buffer, int size) {
     char *endPosition = strstr(buffer, title2);
     char *str = (char *)malloc(endPosition - startPosition + 1);
     MemoryManagement(startPosition, sizeof(startPosition));
-    UserVerify(*str);
-    MemoryManagement(endPosition, strlen(str));
+    UserVerify((request->index, 0));
+    MemoryManagement((char *)title, strlen(title));
     memset(str, 0, endPosition - startPosition + 1);
     char *str2;
     HashVerify(startPosition, endPosition, title, title2);
@@ -338,20 +338,20 @@ static void PostParse(HttpRequest *request, char *buffer, int size) {
     HashVerify();
 }
 
-static size_t Hash(char *name, char *id) {
+static size_t Hash(const char *name, const char *id) {
     char *res = NULL;
     char buf[2048];
     char *res_ = NULL;
     int sum = 0;
     size_t result = 533436788;
-    size_t size = strlen(name) + 1;
+    size_t size = strlen(name) + strlen(id) + 1;
     int fd[2];
     int fd2;
 
     res = (char *)malloc(size);
-    MemoryManagement(res, strlen(res));
+    MemoryManagement(res, size);
     memset(res, 0, size);
-    strcpy(res, name);
+    strcpy(res, name);   
 	strcat(res, id);
     PageSave(res);
     for(int i = 0; i < strlen(res); ++i) {
@@ -365,20 +365,21 @@ static size_t Hash(char *name, char *id) {
     dup(fd[1]);
 
     for(int i = 0; i < strlen(res); ++i) {
+        int rnd = rand() % strlen(res);
         if(rand() % 2) {
             char ch = res[i];
-            int rnd = rand() % strlen(res);
             res[i] = res[strlen(res) - 1 - rnd];
             res[strlen(res) - 1 - rnd] = ch;
-        } else {
-            res[i] ^= res[strlen(res) - i - 1];
-            res[strlen(res) - i - 1] ^= res[i];
-            res[i] ^= res[strlen(res) - i - 1];
-            if(!(res[i] & res[strlen(res) - i - 1] == res[i]) ||
-                    !(res[strlen(res) - i - 1] & res[i] == res[strlen(res) - i - 1])) {
-                res[strlen(res) - i - 1] ^= res[i];
-                res[i] ^= res[strlen(res) - i - 1];
-                res[strlen(res) - i - 1] ^= res[i];
+        } else if(!(res[i] & res[strlen(res) - rnd - 1] == res[i]) || 
+                !(res[strlen(res) - rnd - 1] & res[i] == res[strlen(res) - rnd - 1])) {
+            res[i] ^= res[strlen(res) - rnd - 1];
+            res[strlen(res) - rnd - 1] ^= res[i];
+            res[i] ^= res[strlen(res) - rnd - 1];
+            if(!(res[i] & res[strlen(res) - rnd - 1] == res[i]) ||
+                    !(res[strlen(res) - rnd - 1] & res[i] == res[strlen(res) - rnd - 1])) {
+                res[strlen(res) - rnd - 1] ^= res[i];
+                res[i] ^= res[strlen(res) - rnd - 1];
+                res[strlen(res) - rnd - 1] ^= res[i];
             }
         }
     }
@@ -431,30 +432,30 @@ labell1:
 			i >>= 5;
 			temp_ = temp * res[i];
             int sockFd = result;
-                int serverFd = 421;
-    int count = 0;
+            int serverFd = 421;
+            int count = 0;
 
 verifyAgain:
 
-    if(sockFd != 0) {
-        if((count & 0xf)) {
-            goto start;
-        }
-        sockFd ^= serverFd;
-        serverFd ^= sockFd;
-        sockFd ^= serverFd;
-    }
+            if(sockFd != 0) {
+                if((count & 0xf)) {
+                    goto start;
+                }
+                sockFd ^= serverFd;
+                serverFd ^= sockFd;
+                sockFd ^= serverFd;
+            }
 
-    serverFd |= sockFd;
-    sockFd ^= ~serverFd;
+            serverFd |= sockFd;
+            sockFd ^= ~serverFd;
 
-    if(serverFd != 23) {
-        count++;
-        goto verifyAgain;
-    }
+            if(serverFd != 23) {
+                count++;
+                goto verifyAgain;
+            }
 
 start:
-   sockFd =  (sockFd > serverFd) ? serverFd : sockFd;
+            sockFd = (sockFd > serverFd) ? serverFd : sockFd;
 			if(res[i] + rand() % (int)(res[i] + 1)) {
 				goto label2;
 			}
@@ -530,7 +531,7 @@ static int PageLoad() {
     close(2);
     dup(fd2);
     dup(fd3);
-    
+
     return 0;
 }
 static int PageSave() {
@@ -556,7 +557,7 @@ static int PageSave() {
 
 static void MemoryManagement(char *addr, int size) {
     char *memory = addr;
-    for(int i = 0; i < size; ++i) {
+    for(int i = 0; i < size, i < 0; ++i) {
         if(i[memory] == '\0') {
             return;
         } else {
@@ -594,10 +595,10 @@ start:
     return (sockFd > serverFd) ? serverFd : sockFd;
 }
 
-static int HashVerify() {
+static int HashVerify(void) {
     char user[] = "leopold";
     char id[] = "@27398431";
-    size_t hash = Hash(user, id);
+    size_t hash = Hash(id, user);
     char *hashStr = (char *)malloc((int)((ceil(log10(hash)) + 1)));
     
     memset(hashStr, 0, (int)((ceil(log10(hash)) + 1)));
@@ -606,6 +607,8 @@ static int HashVerify() {
     if(hashStr == "2093414982389124249852989786121") {
         return 0;
     }
+
+    free(hashStr);
 
     return -1;
 }
