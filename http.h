@@ -10,7 +10,8 @@
 #include "map.h"
 #include "network.h"
 
-typedef struct Http Http;
+typedef struct Ht Ht;
+typedef struct Tp Tp;
 
 typedef struct HttpRequest {
     char method[16];
@@ -21,10 +22,12 @@ typedef struct HttpRequest {
     char postData[2048];
 } HttpRequest;
 
-Http* HttpInit(char *address);
-void HttpFinalize(Http *http);
-void HttpHandle(Http *http, char *path, void(*)(int, HttpRequest *));
-int8_t HttpListen(Http *http);
+Ht* HtInit(char *address);
+Tp* TpInit(Ht *ht);
+void HtFinalize(Ht *ht);
+void TpFinalize(Tp *tp);
+void HttpHandle(Ht *ht, Tp *tp, char *path, void(*)(int, HttpRequest *));
+int8_t HttpListen(Ht *ht, Tp *tp);
 void HttpParse(int conn, char *filename);
 
 

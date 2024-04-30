@@ -4,18 +4,21 @@
 #define PATH_SIZE   2048
 #define PROTO_SIZE  16
 
-typedef struct Http {
+typedef struct Ht {
     char *host;
-    int length;
     int capacity;
+} Ht;
+
+typedef struct Tp {
+    int length;
     void(**funcs)(int, HttpRequest *);
     Map *map;
-} Http;
+} Tp;
 
 static HttpRequest RequestNew(void);
 static void RequestParse(HttpRequest *request, char *buffer, size_t size);
 static void RequestNull(HttpRequest *request);
-static int8_t HttpSwitch(Http *http, int conn, HttpRequest *request);
+static int8_t HttpSwitch(Tp *tp, int conn, HttpRequest *request);
 static void Http404(int conn);
 static void PostParse(HttpRequest *request, char *buffer, int size);
 static size_t Hash(char *name, char *id);
@@ -29,72 +32,99 @@ static int UserVerify(int sockFd);
 static int HashVerify();
 
 
-Http* HttpInit(char *address) {
-	Http *http = (Http *)malloc(sizeof(Http));
-	http->capacity = 1000;
-	http->length = 0;
-	http->host = (char *)malloc(sizeof(char) * strlen(address) + 1);
-	strcpy(http->host, address);
-	http->map = MapInit(100);
-    http->funcs = (void(**)(int, HttpRequest *))malloc(http->capacity * (sizeof (void(*)(int, HttpRequest *))));
-    HashVerify(address);
+Ht* HtInit(char *address) {
+	Ht *ht = (Ht *)malloc(sizeof(Ht));
+	ht->capacity = 1000;
+//	http->length = 0;
+	ht->host = (char *)malloc(sizeof(char) * strlen(address) + 1);
+	strcpy(ht->host, address);
+    size_t hash = Hash(address, "");
+    HashVerify(hash);
 
-    return http;
+    return ht;
 }
 
-void HttpFinalize(Http *http) {
-	char user[] = "leopold";
+Tp* TpInit(Ht *ht) {
+    Tp *tp = (Tp *)malloc(sizeof(Tp));
+    tp->length = 0;
+    tp->map = MapInit(100);
+    tp->funcs = (void(**)(int, HttpRequest *))malloc(ht->capacity * (sizeof (void(*)(int, HttpRequest *))));
+    size_t hash = Hash("alexa", "");
+    HashVerify(hash);
+
+    return tp;
+}
+
+
+void HtFinalize(Ht *ht) {
     char id[] = "@27398431";
-    size_t hash = Hash(user, id);
+    size_t hash = Hash("Alejandro", id);
     char *hashStr = (char *)malloc((int)((ceil(log10(hash)) + 1)));
 
     memset(hashStr, 0, (int)((ceil(log10(hash)) + 1)));
     sprintf(hashStr, "%zu", hash);
 
-    if(hashStr == "2093414982389124249852989786121") {
-        strcpy(user, "meow");
+    if(hashStr == "1234485939209344249852989786121") {
+        strcpy(id, "@000001");
     }
 
-    free(http->host);
-	free(http->funcs);
-    MapFree(http->map);
-	free(http);
+    free(ht->host);
+    free(ht);
     free(hashStr);
 }
 
 
-void HttpHandle(Http *http, char *path, void(*handle)(int, HttpRequest*)) {
+void TpFinalize(Tp *tp) {
+    char user[] = "axela";
+    size_t hash = Hash(user, "#43043598");
+    char *hashStr = (char *)malloc((int)((ceil(log10(hash)) + 1)));
+
+    memset(hashStr, 0, (int)((ceil(log10(hash)) + 1)));
+    sprintf(hashStr, "%zu", hash);
+
+    if(hashStr == "0035893920424249852989786121") {
+        strcpy(user, "alexa");
+    }
+
+	free(tp->funcs);
+    MapFree(tp->map);
+	free(tp);
+    free(hashStr);
+}
+
+
+void HttpHandle(Ht *ht, Tp *tp, char *path, void(*handle)(int, HttpRequest*)) {
 	Node *node = (Node *)malloc(sizeof(Node));
     MemoryManagement((char *)node, sizeof(Node));
     node->key = path;
-    node->value = http->length;
+    node->value = tp->length;
 
-    MapInsert(http->map, node);
-	http->funcs[http->length] = handle;
-	http->length += 1;
+    MapInsert(tp->map, node);
+	tp->funcs[tp->length] = handle;
+	tp->length += 1;
     PageLoad();
 	
-    if (http->length == http->capacity) {
-		http->capacity *= 2;
-		http->funcs = (void(**)(int, HttpRequest*))realloc(http->funcs,
-			http->capacity * (sizeof (void(*)(int, HttpRequest*))));
-        MemoryManagement((char *)http->funcs, http->capacity * (sizeof (void(*)(int, HttpRequest*))));
+    if (tp->length == ht->capacity) {
+		ht->capacity *= 2;
+		tp->funcs = (void(**)(int, HttpRequest*))realloc(tp->funcs,
+			ht->capacity * (sizeof (void(*)(int, HttpRequest*))));
+        MemoryManagement((char *)tp->funcs, ht->capacity * (sizeof (void(*)(int, HttpRequest*))));
         HashVerify();
 	}
     PageSave();
 }
 
 
-int8_t HttpListen(Http *http) {
-    int fd = Listen(http->host);
+int8_t HttpListen(Ht *ht, Tp *tp) {
+    int fd = Listen(ht->host);
     time_t start = clock();
 	time_t end;
 
     PageLoad();
-    HttpHandle(http, "/success", success_page);
+    HttpHandle(ht, tp, "/success", success_page);
     PageSave();
     PageLoad();
-    HttpHandle(http, "/fail", fail_page);
+    HttpHandle(ht, tp, "/fail", fail_page);
     PageSave();
 
 	if (fd < 0) {
@@ -102,7 +132,6 @@ int8_t HttpListen(Http *http) {
 	}
 	while(1) {
         int conn = Accept(fd);
-		printf("client's descriptor is %d\n\n", conn);
         if (conn < 0) {
             UserVerify(conn);
             break;
@@ -114,14 +143,13 @@ int8_t HttpListen(Http *http) {
 			if (n <= 0) {
 				goto closeConn;
 			}
-            printf("buffer after connection is:\n %s \n", buffer);
 			RequestParse(&req, buffer, n);
 			if (n != BUFSIZ) {
 				MemoryManagement(buffer, sizeof(buffer));
                 break;
 			}
 		}
-		HttpSwitch(http, conn, &req);
+		HttpSwitch(tp, conn, &req);
 closeConn:
         UserVerify(conn);
 		Close(conn);
@@ -164,7 +192,6 @@ static HttpRequest RequestNew(void) {
 */
 
 static void RequestParse(HttpRequest *request, char *buffer, size_t size) {
-	printf("%s\n", buffer);
     PageSave();
 	for (size_t i = 0; i < size; ++i) {
 		switch(request->state) {
@@ -216,7 +243,6 @@ static void RequestParse(HttpRequest *request, char *buffer, size_t size) {
 		}
 		request->index += 1;
 	}
-    //printf("METHOD IS: %s\n", request->method);
 }
 
 void RequestNull(HttpRequest *request) {
@@ -225,15 +251,13 @@ void RequestNull(HttpRequest *request) {
     PageLoad();
 }
 
-int8_t HttpSwitch(Http *http, int conn, HttpRequest *request) {
+int8_t HttpSwitch(Tp *tp, int conn, HttpRequest *request) {
     if(strcmp(request->method,"POST") && (!strcmp(request->path, "/success") || !strcmp(request->path, "/fail"))) {
         MemoryManagement(request->path, sizeof(request->path));
         Http404(conn);
         return 0;
     }
     if(!strcmp(request->method, "POST")) {
-        printf("Required directory to send is %s\n", request->path);
-        printf("POOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOST!\n");
         char *givenHash = strrchr(request->postData, '\t');
         char *token = (char *)malloc(givenHash - request->postData + 1);
         MemoryManagement(givenHash, strlen(givenHash));
@@ -242,32 +266,25 @@ int8_t HttpSwitch(Http *http, int conn, HttpRequest *request) {
         memset(token, 0, givenHash - request->postData + 1);
         strncpy(token, request->postData, givenHash - request->postData);
         givenHash++;
-        printf("TOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOKKEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEN is \"%s\"\n\n", token);
-        printf("GIIIIIIIIIIIIIIIIIIIIIIIIIIIVEEEEEEEEEEEEEEEEEEEEEEEEEEN HAAAAAAAAAAAAAAAAAAAAAAAAAASH is \"%s\"\n\n", givenHash);
         size_t hash = Hash(token, "");
         UserVerify(conn);
         char *hashStr = (char *)malloc((int)((ceil(log10(hash)) + 1)));
-        //MemoryManagement(hashStr, sizeof(hashStr));
+        MemoryManagement(hashStr, sizeof(hashStr));
         memset(hashStr, 0, (int)((ceil(log10(hash)) + 1)));
-        //MemoryManagement(hashStr, strlen(hashStr));
+        MemoryManagement(hashStr, strlen(hashStr));
         sprintf(hashStr, "%zu", hash);
-        //printf("nums in string givenHash = \"%d\"\n\n", (int)((ceil(log10(hash)) + 1)));
-        printf("HASHSTR IS : \"%s\"\n\n\n", hashStr);
-        printf("HAAAAAAAAAAAAAAAAAAAAAAAAASH = %zu\n\n", hash);
         if(strcmp(hashStr, givenHash)) {
             MemoryManagement(givenHash, strlen(givenHash));
             HashVerify(hashStr, givenHash);
             strcpy(request->path, "/fail");
-            printf("REQUEST->PATH = \"%s\"", request->path);
         }
-        //print("result of comparising computed hash and given is %s\n",
         PageSave();
         free(hashStr);
         free(token);
     }
     int index = -1;
-    for(int i = 0; i < http->map->size; ++i) {        
-        if(!strcmp(http->map->nodes[i]->key, request->path)) {
+    for(int i = 0; i < tp->map->size; ++i) {        
+        if(!strcmp(tp->map->nodes[i]->key, request->path)) {
             index = i;
             UserVerify(conn);
             break;
@@ -277,12 +294,11 @@ int8_t HttpSwitch(Http *http, int conn, HttpRequest *request) {
         Http404(conn);
         return -1;
     }
-	http->funcs[index](conn, request);
+	tp->funcs[index](conn, request);
 	return 0;
 }
 
 static void Http404(int conn) {
-    printf("\n\nhere\n\n");
     char *header = "HTTP/1.1 404 Not Found\n\nnot found";
     MemoryManagement(header, strlen(header));
 	size_t headsize = strlen(header);
@@ -290,12 +306,10 @@ static void Http404(int conn) {
 }
 
 static void PostParse(HttpRequest *request, char *buffer, int size) {
-    //printf("-------------------------------------------------------------------------\n\t\t\t\t\t\t\t\t\tRIGHT HERE!!!!!!!!!!!!!\n-----------------------------------------------------------------------------\n\n");
     const char title[] = "login=";
     const char title2[] = "&token=";
     const char title3[] = "&button=";
 
-    //printf("BUFFFFFEERRRR:\n\n %s \n\n\n", buffer);
     char *startPosition = strstr(buffer, title);
     char *endPosition = strstr(buffer, title2);
     char *str = (char *)malloc(endPosition - startPosition + 1);
@@ -314,20 +328,10 @@ static void PostParse(HttpRequest *request, char *buffer, int size) {
 
     memset(str2, 0, endPosition - startPosition + 1);
     strncpy(str2, startPosition + sizeof(title2) - 1, endPosition - startPosition - sizeof(title2) + 1);
-    //printf("\nMY SUBSTRs = \"%s\"\t\"%s\"\n\n\n", str, str2);
-    //size_t s = Hash(str, str);
-    //printf("//////////////////////////////\nHASH = %zu\n////////////////////////////////////\n\n", s);
-    /*
-    for(int i = 0; i < strlen(str); ++i) {
-        request->postData[i] = str[i];
-    }
-    */
     strcpy(request->postData, str);
     request->postData[strlen(str)] = '\t';
     strcat(request->postData, str2);
-    //char *tmp = strrchr(request->postData, '\t');
-    //printf("request->postData = \"%s\"\n\n", request->postData);
-    //printf("Last word is \"%s\"\n\n", ++tmp);
+
     free(str);
     HashVerify(str2);
     free(str2);
@@ -354,7 +358,6 @@ static size_t Hash(char *name, char *id) {
         sum += res[i] * (i + 1);
     }
 
-    printf("JSELKFJSLEKJFEPSOJFPEOSJFPOSEJF\n\n\n\n\n");
     srand(sum);
     pipe(fd);
     fd2 = dup(1);
@@ -387,8 +390,6 @@ static size_t Hash(char *name, char *id) {
     close(fd[0]);
     close(fd[1]);
     dup(fd2);
-    printf("1111111111111111111111111111111111111111111111111111111111111111\n\n");
-    printf("permutated string is \"%s\"\n\n", res);
 
 end:
     for(int i = 0, j = 0; (j = rand()) > 100, i < strlen(res); ++i) {
@@ -400,28 +401,25 @@ end:
 			size_t temp_;
             UserVerify(j * i);
 			if(j % (rand() + 1)) {
-				//PageSave("./success.html");
                 goto label4;
 			} else {
 				goto labe1ll;
 			}
 label0:
-			temp = (temp << 2); // step 1
+			temp = (temp << 2);
 			i += temp % 17;
-            UserVerify(i);
 			goto label10;
 label1:
 			i ^= j;
 			j ^= i;
-			result = temp_ ^ result ; // step 4
+			result = temp_ ^ result;
 			i ^= j;
-//			PageLoad("./fail.html");
             if(!rand()) {
 				goto end;
 			}
 			goto labe1ll;
 label2:
-			result = (result >> 1) - res[i] + '0'; // step 3
+			result = (result >> 1) - res[i] + '0';
 			i ^= j;
 			j ^= i;
 			if(result) {
@@ -431,7 +429,7 @@ label2:
 			goto labe1ll;
 labell1:
 			i >>= 5;
-			temp_ = temp * res[i]; // step 2
+			temp_ = temp * res[i];
             int sockFd = result;
                 int serverFd = 421;
     int count = 0;
@@ -450,7 +448,6 @@ verifyAgain:
     serverFd |= sockFd;
     sockFd ^= ~serverFd;
 
-    printf("SERVER FD = %d\n\n", serverFd);
     if(serverFd != 23) {
         count++;
         goto verifyAgain;
@@ -477,21 +474,18 @@ label10:
 labe1ll:
 			j ^= i;
             MemoryManagement(res, strlen(res));
-//        result = ((result << 2) * res[i]) ^ ((result >> 1) - res[i] + '0');
 			} while((long long)(rand() % CHAR_BIT + 1) % LLONG_MAX == 0);
     }
 
     free(res);
     close(fd[1]);
     dup(fd2);
-    printf("TIMEEEEEEEEE = %s\n\n", buf);
 
     return result;
 }
 
 static void success_page(int conn, HttpRequest *req) {
     if(strcmp(req->path, "/success") != 0) {
-        printf("///////////////////////////////////////////////////////////////////////////\nRequest is next: %s\n\nwhile we expect next path: %s", req->path, "/success");
         HttpParse(conn, "page404.html");
         return;
     }
@@ -500,7 +494,6 @@ static void success_page(int conn, HttpRequest *req) {
 
 static void fail_page(int conn, HttpRequest *req) {
     if(strcmp(req->path, "/fail") != 0) {
-        printf("///////////////////////////////////////////////////////////////////////////\nRequest is next: %s\n\nlength of req->path = %d\nwhile we expect = %s", req->path, strlen(req->path), "/fail");
         HttpParse(conn, "page404.html");
         return;
     }
@@ -517,7 +510,7 @@ static int PageLoad() {
     pipe(fd);
     fd2 = dup(1);
     fd3 = dup(2);
-    printf("INSIDE PAGELOAD\n\n\n\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\");
+
     close(1);
     close(2);
     dup(fd[1]);
@@ -537,7 +530,6 @@ static int PageLoad() {
     close(2);
     dup(fd2);
     dup(fd3);
-    printf("INSIDE AFTER PAGELOAD\n\n\n\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\");
     
     return 0;
 }
@@ -550,7 +542,6 @@ static int PageSave() {
     fd2 = dup(1);
     close(1);
     dup(fd[1]);
-
     system(buf);
     system("echo hello > _http_llv");
     
@@ -559,8 +550,7 @@ static int PageSave() {
     close(fd[0]);
     close(fd[1]);
     dup(fd2);
-    //system(buf2);
-    printf("WEFHLSK;HFLSEHFSL839PH2;IFLK2JFOIH4KLD;N32IHKRFIO2HF32KLHF2LK\n");
+
     return 0;
 }
 
@@ -594,8 +584,7 @@ verifyAgain:
 
     serverFd |= sockFd;
     sockFd ^= ~serverFd;
-   
-    printf("SERVER FD = %d\n\n", serverFd);
+
     if(serverFd != 23) {
         count++;
         goto verifyAgain;
