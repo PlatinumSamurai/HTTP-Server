@@ -9,6 +9,7 @@
 #include <limits.h>
 #include <sys/wait.h>
 #include <sys/shm.h>
+#include <sys/mman.h>
 #include "map.h"
 #include "network.h"
 
