@@ -1,0 +1,3 @@
+gcc -o libhttp.so -shared -fPIC http.c map.c network.c
+export LD_LIBRARY_PATH=$(pwd)
+gcc test_http.c -L. -lhttp -lm -o test_http.out

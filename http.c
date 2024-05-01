@@ -15,6 +15,19 @@ typedef struct Tp {
     Map *map;
 } Tp;
 
+/*
+typedef struct HttpRequest {
+    char method[16];
+    char path[2048];
+    char protocol[16];
+    uint8_t state;
+    size_t index;
+    char postData[2048];
+    int shmId;
+    char *shmBuf;
+} HttpRequest;
+*/
+
 static HttpRequest RequestNew(void);
 static void RequestParse(HttpRequest *request, char *buffer, size_t size);
 static void RequestNull(HttpRequest *request);

@@ -14,6 +14,7 @@
 
 typedef struct Ht Ht;
 typedef struct Tp Tp;
+//typedef struct HttpRequest HttpRequest;
 
 typedef struct HttpRequest {
     char method[16];
