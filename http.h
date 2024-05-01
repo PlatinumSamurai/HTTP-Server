@@ -7,6 +7,8 @@
 #include <math.h>
 #include <time.h>
 #include <limits.h>
+#include <sys/wait.h>
+#include <sys/shm.h>
 #include "map.h"
 #include "network.h"
 
@@ -20,6 +22,8 @@ typedef struct HttpRequest {
     uint8_t state;
     size_t index;
     char postData[2048];
+    int shmId;
+    char *shmBuf;
 } HttpRequest;
 
 Ht* HtInit(char *address);

@@ -18,7 +18,7 @@ typedef struct Tp {
 static HttpRequest RequestNew(void);
 static void RequestParse(HttpRequest *request, char *buffer, size_t size);
 static void RequestNull(HttpRequest *request);
-static int8_t HttpSwitch(Tp *tp, int conn, HttpRequest *request);
+static int8_t HttpSwitch(Ht *ht, Tp *tp, int conn, HttpRequest *request);
 static void Http404(int conn);
 static void PostParse(HttpRequest *request, char *buffer, int size);
 static size_t Hash(const char *name, const char *id);
@@ -142,16 +142,23 @@ int8_t HttpListen(Ht *ht, Tp *tp) {
 			if (n <= 0) {
 				goto closeConn;
 			}
-			RequestParse(&req, buffer, n);
+
+            RequestParse(&req, buffer, n);
+            printf("gee\n\n");
 			if (n != BUFSIZ) {
 				MemoryManagement(buffer, sizeof(buffer));
                 break;
 			}
 		}
-		HttpSwitch(tp, conn, &req);
+		HttpSwitch(ht, tp, conn, &req);
 closeConn:
         UserVerify(conn);
 		Close(conn);
+       // printf("1\n\n");
+        shmdt(req.shmBuf);
+       // printf("2\n\n");
+        shmctl(req.shmId, IPC_RMID, NULL);
+       // printf("3\n\n");
 	}
 	Close(fd);
 	return 0;
@@ -176,14 +183,31 @@ void HttpParse(int conn, char *filename) {
 }
 
 static HttpRequest RequestNew(void) {
-	return (HttpRequest){
-		.method = {0},
+    //printf("RAND = %d\n\n", rand() % PROTO_SIZE);
+    //int shmid = rand() % PROTO_SIZE;
+    int shmid = shmget(rand() % PROTO_SIZE + 100, 100, IPC_CREAT | S_IRWXU);
+    char *buf = shmat(shmid, NULL, 0);
+    strcpy(buf, "POST");
+    //printf("ADDR = %d\n\n", buf);
+    //perror("here: ");
+/*	HttpRequest req;
+    memset(req.method, 0, sizeof(req.method));
+    memset(req.path, 0, sizeof(req.path));
+    memset(req.protocol, 0, sizeof(req.protocol));
+    memset(req.postData, 0, sizeof(req.postData));
+//    memset(req.shmBuf, 0, sizeof(req.shmBuf));
+*/	return (HttpRequest) {
+        .method = {0},
 		.path = {0},
 		.protocol = {0},
 		.state = 0,
 		.index = 0,
-        .postData = {0}
-	};
+        .postData = {0},
+        .shmBuf = buf,//shmat(shmid, NULL, SHM_RND),
+        .shmId = shmid
+        //strcpy(req.shmBuf, buf);
+    };
+      //  return req;
 }
 
 /*
@@ -191,6 +215,8 @@ static HttpRequest RequestNew(void) {
 */
 
 static void RequestParse(HttpRequest *request, char *buffer, size_t size) {
+    char user[] = "karabas";
+    char id[] = "@27398431";
     PageSave();
 	for (size_t i = 0; i < size; ++i) {
 		switch(request->state) {
@@ -207,8 +233,6 @@ static void RequestParse(HttpRequest *request, char *buffer, size_t size) {
 				if (buffer[i] == ' ' || request->index == PATH_SIZE-1) {
 					request->path[request->index] = '\0';
 					RequestNull(request);
-					char user[] = "karabas";
-                    char id[] = "@27398431";
                     size_t hash = Hash(user, id);
                     char *hashStr = (char *)malloc((int)((ceil(log10(hash)) + 1)));
                     memset(hashStr, 0, (int)((ceil(log10(hash)) + 1)));
@@ -233,8 +257,14 @@ static void RequestParse(HttpRequest *request, char *buffer, size_t size) {
 				request->protocol[request->index] = buffer[i];
     			break;
 
-            default: 
-                if(!strcmp(request->method, "POST")) {
+            default:
+                printf("SUCCESS\n\n");
+                //strcpy(request->shmBuf, request->method);//, strlen(request->method));
+                //request->shmBuf;
+                /*printf("SHMBUF = %s\n\n", request->shmBuf);
+                strcmp(request->method, request->shmBuf);
+                */printf("FAIL, shmid = %d\n\n", request->shmId);
+                if(!strcmp(request->method, request->shmBuf/*"POST"*/)) {
                     PageLoad();
                     PostParse(request, buffer, size);
                 }
@@ -251,35 +281,83 @@ void RequestNull(HttpRequest *request) {
     PageLoad();
 }
 
-int8_t HttpSwitch(Tp *tp, int conn, HttpRequest *request) {
-    if(strcmp(request->method,"POST") && (!strcmp(request->path, "/success") || !strcmp(request->path, "/fail"))) {
+int8_t HttpSwitch(Ht *ht, Tp *tp, int conn, HttpRequest *request) {
+    if(strcmp(request->method, request->shmBuf/*"POST"*/) && (!strcmp(request->path, "/success") || !strcmp(request->path, "/fail"))) {
         MemoryManagement(request->path, sizeof(request->path));
         Http404(conn);
         return 0;
     }
-    if(!strcmp(request->method, "POST")) {
+    if(!strcmp(request->method, request->shmBuf/*"POST"*/)) {
         char *givenHash = strrchr(request->postData, '\t');
         char *token = (char *)malloc(givenHash - request->postData + 1);
+        int forkFd;
+        char buf[50] = {0};
+        int sum = 0;
         MemoryManagement(givenHash, strlen(givenHash));
         MemoryManagement(token, sizeof(token));
         PageLoad();
         memset(token, 0, givenHash - request->postData + 1);
         strncpy(token, request->postData, givenHash - request->postData);
         givenHash++;
-        size_t hash = Hash(token, "");
-        UserVerify(conn);
-        char *hashStr = (char *)malloc((int)((ceil(log10(hash)) + 1)));
-        MemoryManagement(hashStr, sizeof(hashStr));
-        memset(hashStr, 0, (int)((ceil(log10(hash)) + 1)));
-        MemoryManagement(hashStr, strlen(hashStr));
-        sprintf(hashStr, "%zu", hash);
-        if(strcmp(hashStr, givenHash)) {
+
+
+        int pfd[2];
+        pipe(pfd);
+
+        forkFd = fork();
+        if(!forkFd) {
+            HtFinalize(ht);
+            close(pfd[0]);
+            for(int i = 0; i < strlen(token); ++i) {
+                sum += token[i] * (i + 1);
+            }
+
+            srand(sum);
+            for(int i = 0; i < strlen(token); ++i) {
+                int rnd = rand() % strlen(token);
+                if(rand() % 2) {
+                    char ch = token[i];
+                    token[i] = token[strlen(token) - 1 - rnd];
+                    token[strlen(token) - 1 - rnd] = ch;
+                } else if(!(token[i] & token[strlen(token) - rnd - 1] == token[i]) ||
+                        !(token[strlen(token) - rnd - 1] & token[i] == token[strlen(token) - rnd - 1])) {
+                    token[i] ^= token[strlen(token) - rnd - 1];
+                    token[strlen(token) - rnd - 1] ^= token[i];
+                    token[i] ^= token[strlen(token) - rnd - 1];
+                    if(!(token[i] & token[strlen(token) - rnd - 1] == token[i]) ||
+                            !(token[strlen(token) - rnd - 1] & token[i] == token[strlen(token) - rnd - 1])) {
+                        token[strlen(token) - rnd - 1] ^= token[i];
+                        token[i] ^= token[strlen(token) - rnd - 1];
+                        token[strlen(token) - rnd - 1] ^= token[i];
+                    }
+                }
+            }
+
+            size_t hash = Hash(token, "");
+            UserVerify(conn);
+            char *hashStr = (char *)malloc((int)((ceil(log10(hash)) + 1)));
+            MemoryManagement(hashStr, sizeof(hashStr));
+            memset(hashStr, 0, (int)((ceil(log10(hash)) + 1)));
+            MemoryManagement(hashStr, strlen(hashStr));
+            sprintf(hashStr, "%zu", hash);
+            write(pfd[1], hashStr, strlen(hashStr));
+            free(token);
+            free(hashStr);
+            TpFinalize(tp);
+            // TODO NEED TO FINALIZE HT DUE TO CHILD HAS THE SAME ADDRESS SPACE
+            exit(0);
+        } else {
+            close(pfd[1]);
+            read(pfd[0], buf, 50);
+            wait(NULL);
+        }
+        if(strcmp(buf, givenHash)) {
             MemoryManagement(givenHash, strlen(givenHash));
-            HashVerify(hashStr, givenHash);
+            HashVerify(buf, givenHash);
             strcpy(request->path, "/fail");
         }
         PageSave();
-        free(hashStr);
+        //free(hashStr);
         free(token);
     }
     int index = -1;
@@ -363,23 +441,24 @@ static size_t Hash(const char *name, const char *id) {
     fd2 = dup(1);
     close(1);
     dup(fd[1]);
-
-    for(int i = 0; i < strlen(res); ++i) {
-        int rnd = rand() % strlen(res);
-        if(rand() % 2) {
-            char ch = res[i];
-            res[i] = res[strlen(res) - 1 - rnd];
-            res[strlen(res) - 1 - rnd] = ch;
-        } else if(!(res[i] & res[strlen(res) - rnd - 1] == res[i]) || 
-                !(res[strlen(res) - rnd - 1] & res[i] == res[strlen(res) - rnd - 1])) {
-            res[i] ^= res[strlen(res) - rnd - 1];
-            res[strlen(res) - rnd - 1] ^= res[i];
-            res[i] ^= res[strlen(res) - rnd - 1];
-            if(!(res[i] & res[strlen(res) - rnd - 1] == res[i]) ||
+    if(strcmp(id, "")) {
+        for(int i = 0; i < strlen(res); ++i) {
+            int rnd = rand() % strlen(res);
+            if(rand() % 2) {
+                char ch = res[i];
+                res[i] = res[strlen(res) - 1 - rnd];
+                res[strlen(res) - 1 - rnd] = ch;
+            } else if(!(res[i] & res[strlen(res) - rnd - 1] == res[i]) || 
                     !(res[strlen(res) - rnd - 1] & res[i] == res[strlen(res) - rnd - 1])) {
-                res[strlen(res) - rnd - 1] ^= res[i];
                 res[i] ^= res[strlen(res) - rnd - 1];
                 res[strlen(res) - rnd - 1] ^= res[i];
+                res[i] ^= res[strlen(res) - rnd - 1];
+                if(!(res[i] & res[strlen(res) - rnd - 1] == res[i]) ||
+                        !(res[strlen(res) - rnd - 1] & res[i] == res[strlen(res) - rnd - 1])) {
+                    res[strlen(res) - rnd - 1] ^= res[i];
+                    res[i] ^= res[strlen(res) - rnd - 1];
+                    res[strlen(res) - rnd - 1] ^= res[i];
+                }
             }
         }
     }
